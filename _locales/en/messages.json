@@ -1,0 +1,29 @@
+{
+  "extensionName": {
+    "message": "Jump to clipboard message"
+  },
+  "extensionDescription": {
+    "message": "Jumps to the message on the clipboard: by subject in the current folder, or by a mid: link across all folders. Repeating the command selects the next match."
+  },
+  "actionTitle": {
+    "message": "Jump to clipboard message"
+  },
+  "commandJump": {
+    "message": "Jump to the message on the clipboard"
+  },
+  "notifyEmpty": {
+    "message": "The clipboard is empty."
+  },
+  "notifyNotFound": {
+    "message": "No matching message."
+  },
+  "notifyNoMailTab": {
+    "message": "There is no open message list."
+  },
+  "notifyNoFolder": {
+    "message": "Open a mail folder."
+  },
+  "notifyError": {
+    "message": "Could not jump to the message."
+  }
+}
