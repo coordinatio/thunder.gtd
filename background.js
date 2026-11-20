@@ -1,6 +1,9 @@
+import { clipboardText } from "./format-clipboard.js";
 import { parseClipboard } from "./parse-clipboard.js";
 
 const COMMAND = "jump-to-clipboard-message";
+const COPY_SUBJECT = "copy-subject";
+const COPY_MID = "copy-mid";
 const NOTIFICATION_ID = "jump-to-clipboard";
 
 /** @type {SearchSession | null} */
@@ -13,9 +16,17 @@ browser.action.onClicked.addListener(() => {
   enqueue(jumpToClipboardMessage);
 });
 
-browser.commands.onCommand.addListener((command) => {
+browser.subjectCopy.onDoubleClick.addListener((info) => {
+  enqueue(() => writeCopy(info.shiftKey ? "mid" : "subject", info));
+});
+
+browser.commands.onCommand.addListener((command, tab) => {
   if (command === COMMAND) {
     enqueue(jumpToClipboardMessage);
+  } else if (command === COPY_SUBJECT) {
+    enqueue(() => copyCurrent("subject", tab));
+  } else if (command === COPY_MID) {
+    enqueue(() => copyCurrent("mid", tab));
   }
 });
 
@@ -26,6 +37,100 @@ function enqueue(task) {
     () => {},
   );
   return run;
+}
+
+/**
+ * Copy and jump share one queue, so a jump started after a copy reads the
+ * clipboard only once that copy has finished writing it.
+ *
+ * @param {"subject" | "mid"} mode
+ * @param {browser.tabs.Tab | undefined} tab
+ */
+async function copyCurrent(mode, tab) {
+  const windowId = await windowIdFor(tab);
+  if (windowId == null) {
+    await notify("notifyNoMessage");
+    return;
+  }
+
+  let current;
+  try {
+    current = await browser.subjectCopy.getCurrentMessage(windowId);
+  } catch (error) {
+    console.error(error);
+    await notify("notifyCopyFailed");
+    return;
+  }
+  await writeCopy(mode, current);
+}
+
+/**
+ * @param {browser.tabs.Tab | undefined} tab
+ * @returns {Promise<number | null>}
+ */
+async function windowIdFor(tab) {
+  if (tab?.windowId != null) {
+    return tab.windowId;
+  }
+  try {
+    const current = await browser.windows.getCurrent();
+    return current?.id ?? null;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+}
+
+/**
+ * @param {"subject" | "mid"} mode
+ * @param {{kind?: string, subject?: string, headerMessageId?: string, shiftKey?: boolean} | null | undefined} info
+ */
+async function writeCopy(mode, info) {
+  const message = asMessage(info);
+  if (message.kind === "none") {
+    await notify("notifyNoMessage");
+    return;
+  }
+  if (message.kind === "multiple") {
+    await notify("notifyManyMessages");
+    return;
+  }
+
+  const result = clipboardText(mode, message);
+  if (!result.ok) {
+    await notify("notifyNoMessageId");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(result.text);
+  } catch (error) {
+    console.error(error);
+    await notify("notifyCopyFailed");
+  }
+}
+
+/**
+ * A double-click has no kind. It is one displayed message.
+ *
+ * @param {{kind?: string, subject?: string, headerMessageId?: string} | null | undefined} info
+ */
+function asMessage(info) {
+  if (!info) {
+    return { kind: "none" };
+  }
+  if (
+    info.kind === "none" ||
+    info.kind === "multiple" ||
+    info.kind === "message"
+  ) {
+    return info;
+  }
+  return {
+    kind: "message",
+    subject: info.subject ?? "",
+    headerMessageId: info.headerMessageId ?? "",
+  };
 }
 
 async function jumpToClipboardMessage() {

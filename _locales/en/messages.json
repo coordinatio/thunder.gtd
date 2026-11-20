@@ -3,13 +3,19 @@
     "message": "Jump to clipboard message"
   },
   "extensionDescription": {
-    "message": "Jumps to the message on the clipboard: by subject in the current folder, or by a mid: link across all folders. Repeating the command selects the next match."
+    "message": "Jumps to the message on the clipboard: by subject in the current folder, with or without quotes, or by a mid: link across all folders. Repeating the command selects the next match. Double-click the subject to copy it in quotes, or Shift-double-click to copy the mid: link. The same actions can be assigned to shortcuts."
   },
   "actionTitle": {
     "message": "Jump to clipboard message"
   },
   "commandJump": {
     "message": "Jump to the message on the clipboard"
+  },
+  "commandCopySubject": {
+    "message": "Copy the message subject"
+  },
+  "commandCopyMid": {
+    "message": "Copy the mid: link"
   },
   "notifyEmpty": {
     "message": "The clipboard is empty."
@@ -25,5 +31,17 @@
   },
   "notifyError": {
     "message": "Could not jump to the message."
+  },
+  "notifyNoMessage": {
+    "message": "No message is selected."
+  },
+  "notifyManyMessages": {
+    "message": "Select a single message."
+  },
+  "notifyNoMessageId": {
+    "message": "This message has no Message-ID."
+  },
+  "notifyCopyFailed": {
+    "message": "Could not copy."
   }
 }

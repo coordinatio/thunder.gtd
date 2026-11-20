@@ -1,0 +1,76 @@
+[
+  {
+    "namespace": "subjectCopy",
+    "types": [
+      {
+        "id": "CurrentMessage",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["message", "none", "multiple"],
+            "description": "message when one message is current, none when nothing is selected, multiple when more than one row is selected."
+          },
+          "subject": {
+            "type": "string",
+            "optional": true,
+            "description": "Decoded subject. Present when kind is message."
+          },
+          "headerMessageId": {
+            "type": "string",
+            "optional": true,
+            "description": "Message-ID without angle brackets. Present when kind is message."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getCurrentMessage",
+        "type": "function",
+        "async": "callback",
+        "description": "The message a copy shortcut should use in this window: the displayed message, or the single selected row when the message pane is hidden.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "message",
+                "$ref": "CurrentMessage"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onDoubleClick",
+        "type": "function",
+        "description": "Fired when the subject text in a message view is double-clicked.",
+        "parameters": [
+          {
+            "name": "info",
+            "type": "object",
+            "properties": {
+              "shiftKey": {
+                "type": "boolean"
+              },
+              "subject": {
+                "type": "string"
+              },
+              "headerMessageId": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

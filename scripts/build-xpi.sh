@@ -16,6 +16,9 @@ files=(
   manifest.json
   background.js
   parse-clipboard.js
+  format-clipboard.js
+  api/subjectCopy/schema.json
+  api/subjectCopy/implementation.js
   icons/jump.svg
   _locales/en/messages.json
   _locales/ru/messages.json

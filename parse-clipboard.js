@@ -3,6 +3,11 @@
  * Leading and trailing whitespace is ignored. A mid: link is recognized
  * only when the trimmed text starts with that prefix.
  *
+ * One surrounding pair of ASCII quotes is a subject wrapper, not part of
+ * the subject. "Тема" and Тема are the same search. The text inside the
+ * quotes is not inspected for a mid: prefix, so a copied subject that
+ * itself starts with mid: stays a subject.
+ *
  * @param {unknown} text
  * @returns {{type: "empty"} | {type: "mid", id: string} | {type: "subject", subject: string}}
  */
@@ -16,12 +21,34 @@ export function parseClipboard(text) {
     return { type: "empty" };
   }
 
+  if (isQuoted(trimmed)) {
+    const subject = unwrapQuotes(trimmed).trim().normalize("NFC");
+    if (!subject) {
+      return { type: "empty" };
+    }
+    return { type: "subject", subject };
+  }
+
   if (/^mid:/i.test(trimmed)) {
     const raw = trimmed.replace(/^mid:/i, "");
     return { type: "mid", id: messageIdFromMidUrl(raw).normalize("NFC") };
   }
 
   return { type: "subject", subject: trimmed.normalize("NFC") };
+}
+
+/**
+ * @param {string} value
+ */
+function isQuoted(value) {
+  return value.length >= 2 && value.startsWith('"') && value.endsWith('"');
+}
+
+/**
+ * @param {string} value
+ */
+function unwrapQuotes(value) {
+  return value.slice(1, -1);
 }
 
 /**

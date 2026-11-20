@@ -108,3 +108,43 @@ test("only the first line of a mid link is used", () => {
     id: MESSAGE_ID,
   });
 });
+
+test("one pair of quotes is not part of the subject", () => {
+  assert.deepEqual(parseClipboard('"Отчёт"'), parseClipboard("Отчёт"));
+  assert.deepEqual(parseClipboard('  "  Re: Отчёт  "  '), parseClipboard("Re: Отчёт"));
+  assert.deepEqual(parseClipboard('"Отчёт"'), {
+    type: "subject",
+    subject: "Отчёт",
+  });
+});
+
+test("quoted subject is normalized to NFC", () => {
+  assert.deepEqual(parseClipboard('"\u0438\u0306"'), {
+    type: "subject",
+    subject: "\u0439",
+  });
+});
+
+test("empty quotes are an empty clipboard", () => {
+  assert.deepEqual(parseClipboard('""'), { type: "empty" });
+  assert.deepEqual(parseClipboard('"   "'), { type: "empty" });
+  assert.deepEqual(parseClipboard('  "  "  '), { type: "empty" });
+});
+
+test("only the outer pair of quotes is removed", () => {
+  assert.deepEqual(parseClipboard('""тема""'), {
+    type: "subject",
+    subject: '"тема"',
+  });
+});
+
+test("quotes keep a subject that starts with mid:", () => {
+  assert.deepEqual(parseClipboard('"mid:not-a-link"'), {
+    type: "subject",
+    subject: "mid:not-a-link",
+  });
+  assert.deepEqual(parseClipboard("mid:not-a-link"), {
+    type: "mid",
+    id: "not-a-link",
+  });
+});
