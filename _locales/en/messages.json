@@ -43,5 +43,21 @@
   },
   "notifyCopyFailed": {
     "message": "Could not copy."
+  },
+  "toastSearching": {
+    "message": "Searching: $TEXT$",
+    "placeholders": {
+      "text": {
+        "content": "$1"
+      }
+    }
+  },
+  "toastCopied": {
+    "message": "Copied: $TEXT$",
+    "placeholders": {
+      "text": {
+        "content": "$1"
+      }
+    }
   }
 }

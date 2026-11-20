@@ -46,6 +46,48 @@
             ]
           }
         ]
+      },
+      {
+        "name": "showToast",
+        "type": "function",
+        "async": "callback",
+        "description": "Shows a short notice in the center of the mail window. A timeout of 0 keeps it until hideToast.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          },
+          {
+            "name": "text",
+            "type": "string"
+          },
+          {
+            "name": "timeoutMs",
+            "type": "integer"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": []
+          }
+        ]
+      },
+      {
+        "name": "hideToast",
+        "type": "function",
+        "async": "callback",
+        "description": "Removes the center notice from the mail window.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": []
+          }
+        ]
       }
     ],
     "events": [
@@ -66,6 +108,11 @@
               },
               "headerMessageId": {
                 "type": "string"
+              },
+              "windowId": {
+                "type": "integer",
+                "optional": true,
+                "description": "Mail window that contains the double-clicked subject."
               }
             }
           }

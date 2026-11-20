@@ -5,6 +5,7 @@ const COMMAND = "jump-to-clipboard-message";
 const COPY_SUBJECT = "copy-subject";
 const COPY_MID = "copy-mid";
 const NOTIFICATION_ID = "jump-to-clipboard";
+const COPY_TOAST_MS = 2000;
 
 /** @type {SearchSession | null} */
 let session = null;
@@ -17,7 +18,9 @@ browser.action.onClicked.addListener(() => {
 });
 
 browser.subjectCopy.onDoubleClick.addListener((info) => {
-  enqueue(() => writeCopy(info.shiftKey ? "mid" : "subject", info));
+  enqueue(() =>
+    writeCopy(info.shiftKey ? "mid" : "subject", info, info.windowId),
+  );
 });
 
 browser.commands.onCommand.addListener((command, tab) => {
@@ -61,7 +64,7 @@ async function copyCurrent(mode, tab) {
     await notify("notifyCopyFailed");
     return;
   }
-  await writeCopy(mode, current);
+  await writeCopy(mode, current, windowId);
 }
 
 /**
@@ -84,8 +87,9 @@ async function windowIdFor(tab) {
 /**
  * @param {"subject" | "mid"} mode
  * @param {{kind?: string, subject?: string, headerMessageId?: string, shiftKey?: boolean} | null | undefined} info
+ * @param {number | null | undefined} windowId
  */
-async function writeCopy(mode, info) {
+async function writeCopy(mode, info, windowId) {
   const message = asMessage(info);
   if (message.kind === "none") {
     await notify("notifyNoMessage");
@@ -107,7 +111,9 @@ async function writeCopy(mode, info) {
   } catch (error) {
     console.error(error);
     await notify("notifyCopyFailed");
+    return;
   }
+  await showCopyToast(windowId, result.text);
 }
 
 /**
@@ -163,13 +169,34 @@ async function jump() {
   }
 
   const signature = signatureFor(parsed, folderId);
-  if (!session || session.abandoned || session.signature !== signature) {
+  const fresh = !session || session.abandoned || session.signature !== signature;
+  if (fresh) {
     abandon(session);
     session = createSession(parsed, signature, folderId);
+  }
+
+  // The toast has to be on screen before messages.query. That call keeps
+  // the parent thread busy, so a notice queued after it only appears,
+  // then vanishes, when the search finally returns.
+  const announce = needsWait(session);
+  if (announce) {
+    await showSearchToast(tab.windowId, searchToastText(parsed));
+  }
+  if (fresh) {
     search(session);
   }
 
-  const result = await nextMatch(session);
+  let result;
+  try {
+    result = await nextMatch(session);
+    if (result.type === "found") {
+      await reveal(result.message, tab);
+    }
+  } finally {
+    if (announce) {
+      await hideSearchToast(tab.windowId);
+    }
+  }
   if (result.type === "cancelled") {
     return;
   }
@@ -179,10 +206,77 @@ async function jump() {
   }
   if (result.type === "none") {
     await notify("notifyNotFound");
+  }
+}
+
+/**
+ * A repeat jump already has its match. Only a search that has not produced
+ * one yet is slow enough to announce.
+ *
+ * @param {SearchSession} current
+ */
+function needsWait(current) {
+  if (!current || current.abandoned || current.complete) {
+    return false;
+  }
+  return current.served >= current.messages.length;
+}
+
+/**
+ * @param {{type: "mid", id: string} | {type: "subject", subject: string}} parsed
+ */
+function searchToastText(parsed) {
+  const query = parsed.type === "mid" ? `mid:${parsed.id}` : parsed.subject;
+  return browser.i18n.getMessage("toastSearching", query);
+}
+
+/**
+ * @param {number | null | undefined} windowId
+ * @param {string} text
+ */
+async function showSearchToast(windowId, text) {
+  if (windowId == null) {
     return;
   }
+  try {
+    await browser.subjectCopy.showToast(windowId, text, 0);
+  } catch (error) {
+    console.error(error);
+  }
+}
 
-  await reveal(result.message, tab);
+/**
+ * @param {number | null | undefined} windowId
+ */
+async function hideSearchToast(windowId) {
+  if (windowId == null) {
+    return;
+  }
+  try {
+    await browser.subjectCopy.hideToast(windowId);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+/**
+ * @param {number | null | undefined} windowId
+ * @param {string} text
+ */
+async function showCopyToast(windowId, text) {
+  const id = windowId != null ? windowId : await windowIdFor();
+  if (id == null) {
+    return;
+  }
+  try {
+    await browser.subjectCopy.showToast(
+      id,
+      browser.i18n.getMessage("toastCopied", text),
+      COPY_TOAST_MS,
+    );
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 /**

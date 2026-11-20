@@ -43,5 +43,21 @@
   },
   "notifyCopyFailed": {
     "message": "Не удалось скопировать."
+  },
+  "toastSearching": {
+    "message": "Поиск: $TEXT$",
+    "placeholders": {
+      "text": {
+        "content": "$1"
+      }
+    }
+  },
+  "toastCopied": {
+    "message": "Скопировано: $TEXT$",
+    "placeholders": {
+      "text": {
+        "content": "$1"
+      }
+    }
   }
 }
