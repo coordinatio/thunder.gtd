@@ -20,6 +20,8 @@ files=(
   api/subjectCopy/schema.json
   api/subjectCopy/implementation.js
   icons/jump.svg
+  icons/subject.svg
+  icons/mid.svg
   _locales/en/messages.json
   _locales/ru/messages.json
 )

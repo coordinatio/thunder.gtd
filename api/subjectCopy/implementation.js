@@ -27,9 +27,9 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
 
     return {
       subjectCopy: {
-        onDoubleClick: new ExtensionCommon.EventManager({
+        onCopyRequested: new ExtensionCommon.EventManager({
           context,
-          name: "subjectCopy.onDoubleClick",
+          name: "subjectCopy.onCopyRequested",
           register(fire) {
             install(fire);
             return () => {
@@ -112,7 +112,7 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
         }
       }
       for (const [doc, listener] of documentListeners) {
-        detachSubject(doc, listener);
+        detachButtons(listener);
         documentListeners.delete(doc);
       }
       ExtensionSupport.unregisterWindowListener(listenerId);
@@ -211,95 +211,141 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
           console.error(error);
           return;
         }
-        attachSubject(doc, fire);
+        attachButtons(doc, fire);
       };
       browser.addEventListener("load", update, true);
       update();
     }
 
-    function attachSubject(doc, fire) {
+    function attachButtons(doc, fire) {
       if (!doc || documentListeners.has(doc) || !isAboutMessage(doc)) {
         return;
       }
-      const box = doc.getElementById("expandedsubjectBox");
-      if (!box) {
+      const toolbar = doc.getElementById("header-view-toolbar");
+      if (!toolbar) {
         return;
       }
-      // The second mousedown of a double-click selects one word. Cancelling
-      // it leaves the whole subject unselected. The click still follows.
-      const onMouseDown = (event) => {
-        if (
-          event.button !== 0 ||
-          event.detail !== 2 ||
-          !subjectValue(box, event)
-        ) {
-          return;
-        }
-        event.preventDefault();
-      };
-      const onDoubleClick = (event) => {
-        onSubjectDoubleClick(doc, box, event, fire);
-      };
+      const buttons = HEADER_BUTTONS.map((spec) =>
+        ensureHeaderButton(doc, toolbar, spec, fire),
+      );
       const onUnload = () => {
         const listener = documentListeners.get(doc);
         if (!listener) {
           return;
         }
-        detachSubject(doc, listener);
+        detachButtons(listener);
         documentListeners.delete(doc);
       };
-      box.addEventListener("mousedown", onMouseDown, true);
-      box.addEventListener("dblclick", onDoubleClick, true);
       doc.defaultView?.addEventListener("pagehide", onUnload, { once: true });
-      documentListeners.set(doc, { box, onMouseDown, onDoubleClick, onUnload });
+      documentListeners.set(doc, { doc, onUnload, buttons });
+    }
+
+    function ensureHeaderButton(doc, toolbar, spec, fire) {
+      let button = doc.getElementById(spec.id);
+      if (!button) {
+        button = createHeaderButton(doc, spec);
+        const more = toolbar.querySelector("#otherActionsButton");
+        if (more) {
+          toolbar.insertBefore(button, more);
+        } else {
+          toolbar.appendChild(button);
+        }
+      }
+      const onCommand = () => {
+        requestCopy(doc, spec.mode, fire);
+      };
+      // Match the built-in header buttons: a click must not leave focus here.
+      const onMouseDown = (event) => {
+        event.preventDefault();
+      };
+      button.addEventListener("command", onCommand);
+      button.addEventListener("mousedown", onMouseDown);
+      return { button, onCommand, onMouseDown };
+    }
+
+    function createHeaderButton(doc, spec) {
+      const button = doc.createXULElement
+        ? doc.createXULElement("toolbarbutton")
+        : doc.createElementNS(XUL_NS, "toolbarbutton");
+      button.id = spec.id;
+      button.className = "toolbarbutton-1 message-header-view-button";
+      button.setAttribute("label", message(spec.labelKey));
+      button.setAttribute("tooltiptext", message(spec.tooltipKey));
+      button.style.setProperty("-moz-context-properties", "fill, stroke");
+      button.style.setProperty("fill", "currentColor");
+      button.style.setProperty("stroke", "currentColor");
+      button.style.setProperty(
+        "list-style-image",
+        `url("${context.extension.getURL(spec.icon)}")`,
+      );
+      return button;
+    }
+
+    function message(key) {
+      try {
+        return context.extension.localeData.localizeMessage(key) || key;
+      } catch (error) {
+        console.error(error);
+        return key;
+      }
     }
   }
 };
 
+const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
+
+const HEADER_BUTTONS = [
+  {
+    id: "jump-to-clipboard-copy-subject",
+    mode: "subject",
+    labelKey: "buttonCopySubject",
+    tooltipKey: "commandCopySubject",
+    icon: "icons/subject.svg",
+  },
+  {
+    id: "jump-to-clipboard-copy-mid",
+    mode: "mid",
+    labelKey: "buttonCopyMid",
+    tooltipKey: "commandCopyMid",
+    icon: "icons/mid.svg",
+  },
+];
+
 /**
- * @param {Document} doc
- * @param {{box: Element, onMouseDown: EventListener, onDoubleClick: EventListener, onUnload: EventListener}} listener
+ * @param {{onUnload: EventListener, buttons: Array<{button: Element, onCommand: EventListener, onMouseDown: EventListener}>}} listener
  */
-function detachSubject(doc, listener) {
+function detachButtons(listener) {
   try {
-    listener.box.removeEventListener("mousedown", listener.onMouseDown, true);
-    listener.box.removeEventListener("dblclick", listener.onDoubleClick, true);
-    doc.defaultView?.removeEventListener("pagehide", listener.onUnload);
+    listener.doc?.defaultView?.removeEventListener("pagehide", listener.onUnload);
   } catch (error) {
     console.error(error);
   }
-}
-
-/**
- * @param {Element} box
- * @param {Event} event
- */
-function subjectValue(box, event) {
-  const value = event.target?.closest?.(".header-row-value");
-  return !!value && box.contains(value);
+  for (const item of listener.buttons || []) {
+    try {
+      item.button.removeEventListener("command", item.onCommand);
+      item.button.removeEventListener("mousedown", item.onMouseDown);
+      item.button.remove();
+    } catch (error) {
+      console.error(error);
+    }
+  }
 }
 
 /**
  * @param {Document} doc
- * @param {Element} box
- * @param {MouseEvent} event
+ * @param {"subject" | "mid"} mode
  * @param {{async: Function}} fire
  */
-function onSubjectDoubleClick(doc, box, event, fire) {
-  if (event.button !== 0 || !subjectValue(box, event)) {
-    return;
-  }
+function requestCopy(doc, mode, fire) {
   const described = describeAboutMessage(doc.defaultView);
-  if (described.kind !== "message") {
-    return;
-  }
-  event.preventDefault();
-  event.stopPropagation();
   const info = {
-    shiftKey: event.shiftKey,
-    subject: described.subject,
-    headerMessageId: described.headerMessageId,
+    mode,
+    kind: described.kind === "message" ? "message" : "none",
   };
+  if (described.kind === "message") {
+    info.subject = described.subject;
+    info.headerMessageId = described.headerMessageId;
+  }
   const windowId = chromeWindowId(doc);
   if (windowId != null) {
     info.windowId = windowId;

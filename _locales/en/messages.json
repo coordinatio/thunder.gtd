@@ -3,7 +3,7 @@
     "message": "Jump to clipboard message"
   },
   "extensionDescription": {
-    "message": "Jumps to the message on the clipboard: by subject in the current folder, with or without quotes, or by a mid: link across all folders. Repeating the command selects the next match. Double-click the subject to copy it in quotes, or Shift-double-click to copy the mid: link. The same actions can be assigned to shortcuts."
+    "message": "Jumps to the message on the clipboard: by subject in the current folder, with or without quotes, or by a mid: link across all folders. Repeating the command selects the next match. Header buttons copy the subject in quotes and the mid: link. The same actions can be assigned to shortcuts."
   },
   "actionTitle": {
     "message": "Jump to clipboard message"
@@ -16,6 +16,12 @@
   },
   "commandCopyMid": {
     "message": "Copy the mid: link"
+  },
+  "buttonCopySubject": {
+    "message": "Subject"
+  },
+  "buttonCopyMid": {
+    "message": "mid"
   },
   "notifyEmpty": {
     "message": "The clipboard is empty."

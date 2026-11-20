@@ -17,10 +17,9 @@ browser.action.onClicked.addListener(() => {
   enqueue(jumpToClipboardMessage);
 });
 
-browser.subjectCopy.onDoubleClick.addListener((info) => {
-  enqueue(() =>
-    writeCopy(info.shiftKey ? "mid" : "subject", info, info.windowId),
-  );
+browser.subjectCopy.onCopyRequested.addListener((info) => {
+  const mode = info.mode === "mid" ? "mid" : "subject";
+  enqueue(() => writeCopy(mode, info, info.windowId));
 });
 
 browser.commands.onCommand.addListener((command, tab) => {
@@ -117,7 +116,8 @@ async function writeCopy(mode, info, windowId) {
 }
 
 /**
- * A double-click has no kind. It is one displayed message.
+ * A header button describes one displayed message and may omit kind only
+ * when the payload is empty.
  *
  * @param {{kind?: string, subject?: string, headerMessageId?: string} | null | undefined} info
  */

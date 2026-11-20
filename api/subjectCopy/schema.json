@@ -92,27 +92,34 @@
     ],
     "events": [
       {
-        "name": "onDoubleClick",
+        "name": "onCopyRequested",
         "type": "function",
-        "description": "Fired when the subject text in a message view is double-clicked.",
+        "description": "Fired when a header-toolbar copy button is pressed.",
         "parameters": [
           {
             "name": "info",
             "type": "object",
             "properties": {
-              "shiftKey": {
-                "type": "boolean"
+              "mode": {
+                "type": "string",
+                "enum": ["subject", "mid"]
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["message", "none"]
               },
               "subject": {
-                "type": "string"
+                "type": "string",
+                "optional": true
               },
               "headerMessageId": {
-                "type": "string"
+                "type": "string",
+                "optional": true
               },
               "windowId": {
                 "type": "integer",
                 "optional": true,
-                "description": "Mail window that contains the double-clicked subject."
+                "description": "Mail window that contains the message header."
               }
             }
           }
