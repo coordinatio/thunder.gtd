@@ -8,17 +8,14 @@ var { ExtensionSupport } = ChromeUtils.importESModule(
   "resource:///modules/ExtensionSupport.sys.mjs",
 );
 
-var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
-  getAPI(context) {
-    const listenerId = `${context.extension.id}#subject-copy`;
-    const documentListeners = new Map();
-    const watchedBrowsers = new WeakSet();
-    const watched3Pane = new WeakSet();
-    const observedPanes = new WeakSet();
-    const monitors = [];
-    const disconnectors = [];
-    let installed = false;
+var subjectCopy = class extends ExtensionCommon.ExtensionAPIPersistent {
+  PERSISTENT_EVENTS = {
+    onCopyRequested({ fire }) {
+      return this.registerCopyRequests(fire);
+    },
+  };
 
+  getAPI(context) {
     context.callOnClose({
       close() {
         dismissAllToasts();
@@ -29,13 +26,9 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
       subjectCopy: {
         onCopyRequested: new ExtensionCommon.EventManager({
           context,
-          name: "subjectCopy.onCopyRequested",
-          register(fire) {
-            install(fire);
-            return () => {
-              uninstall();
-            };
-          },
+          module: "subjectCopy",
+          event: "onCopyRequested",
+          extensionApi: this,
         }).api(),
 
         async getCurrentMessage(windowId) {
@@ -72,31 +65,37 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
         return null;
       }
     }
+  }
 
-    function install(fire) {
-      if (installed) {
-        return;
-      }
-      installed = true;
-      const hooked = ExtensionSupport.registerWindowListener(listenerId, {
-        chromeURLs: [
-          "chrome://messenger/content/messenger.xhtml",
-          "chrome://messenger/content/messageWindow.xhtml",
-        ],
-        onLoadWindow(window) {
-          watchChromeWindow(window, fire);
-        },
-      });
-      if (!hooked) {
-        installed = false;
-      }
-    }
+  registerCopyRequests(fire) {
+    const extension = this.extension;
+    const listenerId = `${extension.id}#subject-copy`;
+    const documentListeners = new Map();
+    const watchedBrowsers = new WeakSet();
+    const watched3Pane = new WeakSet();
+    const observedPanes = new WeakSet();
+    const disconnectors = [];
+    let installed = ExtensionSupport.registerWindowListener(listenerId, {
+      chromeURLs: [
+        "chrome://messenger/content/messenger.xhtml",
+        "chrome://messenger/content/messageWindow.xhtml",
+      ],
+      onLoadWindow: watchChromeWindow,
+    });
+
+    return {
+      unregister: uninstall,
+      convert(newFire) {
+        fire = newFire;
+      },
+    };
 
     function uninstall() {
       if (!installed) {
         return;
       }
       installed = false;
+      ExtensionSupport.unregisterWindowListener(listenerId);
       for (const disconnect of disconnectors.splice(0)) {
         try {
           disconnect();
@@ -104,24 +103,16 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
           console.error(error);
         }
       }
-      for (const { tabmail, monitor } of monitors.splice(0)) {
-        try {
-          tabmail.unregisterTabMonitor(monitor);
-        } catch (error) {
-          console.error(error);
-        }
-      }
-      for (const [doc, listener] of documentListeners) {
+      for (const listener of documentListeners.values()) {
         detachButtons(listener);
-        documentListeners.delete(doc);
       }
-      ExtensionSupport.unregisterWindowListener(listenerId);
+      documentListeners.clear();
     }
 
-    function watchChromeWindow(window, fire) {
+    function watchChromeWindow(window) {
       const type = window.document.documentElement.getAttribute("windowtype");
       if (type === "mail:messageWindow") {
-        watchBrowser(window.document.getElementById("messageBrowser"), fire);
+        watchBrowser(window.document.getElementById("messageBrowser"));
         return;
       }
 
@@ -130,32 +121,31 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
         return;
       }
       for (const tab of tabmail.tabInfo || []) {
-        watchTab(tab, fire);
+        watchTab(tab);
       }
       const monitor = {
-        onTabOpened(tab) {
-          watchTab(tab, fire);
-        },
-        onTabRestored(tab) {
-          watchTab(tab, fire);
-        },
+        onTabOpened: watchTab,
+        onTabRestored: watchTab,
+        onTabSwitched: watchTab,
+        // Tabmail calls this on every registered monitor.
+        onTabTitleChanged() {},
       };
       tabmail.registerTabMonitor(monitor);
-      monitors.push({ tabmail, monitor });
+      disconnectors.push(() => tabmail.unregisterTabMonitor(monitor));
     }
 
-    function watchTab(tab, fire) {
+    function watchTab(tab) {
       const name = tab?.mode?.name;
       if (name === "mailMessageTab") {
-        watchBrowser(tab.chromeBrowser, fire);
+        watchBrowser(tab.chromeBrowser);
         return;
       }
       if (name === "mail3PaneTab") {
-        watch3Pane(tab.chromeBrowser, fire);
+        watch3Pane(tab.chromeBrowser);
       }
     }
 
-    function watch3Pane(browser, fire) {
+    function watch3Pane(browser) {
       if (!browser || watched3Pane.has(browser)) {
         return;
       }
@@ -176,7 +166,7 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
           win.messageBrowser || pane?.querySelector("#messageBrowser");
         const messageBrowser = found();
         if (messageBrowser) {
-          watchBrowser(messageBrowser, fire);
+          watchBrowser(messageBrowser);
           return;
         }
         if (!pane || observedPanes.has(pane)) {
@@ -189,16 +179,17 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
             return;
           }
           observer.disconnect();
-          watchBrowser(messageBrowser, fire);
+          watchBrowser(messageBrowser);
         });
         observer.observe(pane, { childList: true, subtree: true });
         disconnectors.push(() => observer.disconnect());
       };
       browser.addEventListener("load", update, true);
+      disconnectors.push(() => browser.removeEventListener("load", update, true));
       update();
     }
 
-    function watchBrowser(browser, fire) {
+    function watchBrowser(browser) {
       if (!browser || watchedBrowsers.has(browser)) {
         return;
       }
@@ -211,13 +202,14 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
           console.error(error);
           return;
         }
-        attachButtons(doc, fire);
+        attachButtons(doc);
       };
       browser.addEventListener("load", update, true);
+      disconnectors.push(() => browser.removeEventListener("load", update, true));
       update();
     }
 
-    function attachButtons(doc, fire) {
+    function attachButtons(doc) {
       if (!doc || documentListeners.has(doc) || !isAboutMessage(doc)) {
         return;
       }
@@ -226,9 +218,13 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
         return;
       }
       const buttons = HEADER_BUTTONS.map((spec) =>
-        ensureHeaderButton(doc, toolbar, spec, fire),
+        ensureHeaderButton(doc, toolbar, spec),
       );
-      const onUnload = () => {
+      const onPageHide = (event) => {
+        // Switching messages hides the nested body document, but reuses this header.
+        if (event.target !== doc) {
+          return;
+        }
         const listener = documentListeners.get(doc);
         if (!listener) {
           return;
@@ -236,11 +232,11 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
         detachButtons(listener);
         documentListeners.delete(doc);
       };
-      doc.defaultView?.addEventListener("pagehide", onUnload, { once: true });
-      documentListeners.set(doc, { doc, onUnload, buttons });
+      doc.defaultView?.addEventListener("pagehide", onPageHide);
+      documentListeners.set(doc, { doc, onPageHide, buttons });
     }
 
-    function ensureHeaderButton(doc, toolbar, spec, fire) {
+    function ensureHeaderButton(doc, toolbar, spec) {
       let button = doc.getElementById(spec.id);
       if (!button) {
         button = createHeaderButton(doc, spec);
@@ -276,14 +272,14 @@ var subjectCopy = class extends ExtensionCommon.ExtensionAPI {
       button.style.setProperty("stroke", "currentColor");
       button.style.setProperty(
         "list-style-image",
-        `url("${context.extension.getURL(spec.icon)}")`,
+        `url("${extension.getURL(spec.icon)}")`,
       );
       return button;
     }
 
     function message(key) {
       try {
-        return context.extension.localeData.localizeMessage(key) || key;
+        return extension.localeData.localizeMessage(key) || key;
       } catch (error) {
         console.error(error);
         return key;
@@ -312,11 +308,11 @@ const HEADER_BUTTONS = [
 ];
 
 /**
- * @param {{onUnload: EventListener, buttons: Array<{button: Element, onCommand: EventListener, onMouseDown: EventListener}>}} listener
+ * @param {{doc: Document, onPageHide: EventListener, buttons: Array<{button: Element, onCommand: EventListener, onMouseDown: EventListener}>}} listener
  */
 function detachButtons(listener) {
   try {
-    listener.doc?.defaultView?.removeEventListener("pagehide", listener.onUnload);
+    listener.doc.defaultView?.removeEventListener("pagehide", listener.onPageHide);
   } catch (error) {
     console.error(error);
   }
@@ -350,7 +346,7 @@ function requestCopy(doc, mode, fire) {
   if (windowId != null) {
     info.windowId = windowId;
   }
-  fire.async(info);
+  fire.async(info).catch(console.error);
 }
 
 /**
